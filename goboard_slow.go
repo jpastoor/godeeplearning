@@ -1,0 +1,433 @@
+package main
+
+import (
+	"fmt"
+	"reflect"
+)
+
+type Move struct {
+	Point    Point
+	IsPass   bool
+	IsResign bool
+	IsPlay   bool
+}
+
+func Play(point Point) Move {
+	return Move{
+		Point:  point,
+		IsPlay: true,
+	}
+}
+
+func Pass() Move {
+	return Move{
+		IsPass: true,
+	}
+}
+
+func Resign() Move {
+	return Move{
+		IsResign: true,
+	}
+}
+
+type GoString struct {
+	Player    Player
+	Stones    map[int]map[int]bool
+	Liberties map[int]map[int]bool
+}
+
+func (gs GoString) Copy() GoString {
+	newPlayer := gs.Player
+
+	newLiberties := make(map[int]map[int]bool)
+	for row, cols := range gs.Liberties {
+		newLibertiesRow := make(map[int]bool)
+		for col, val := range cols {
+			newLibertiesRow[col] = val
+		}
+		newLiberties[row] = newLibertiesRow
+	}
+
+	newStones := make(map[int]map[int]bool)
+	for row, cols := range gs.Stones {
+		newStonesRow := make(map[int]bool)
+		for col, val := range cols {
+			newStonesRow[col] = val
+		}
+		newStones[row] = newStonesRow
+	}
+
+	return GoString{
+		Player: newPlayer,
+		Liberties: newLiberties,
+		Stones: newStones,
+	}
+}
+
+func (gs GoString) removeLiberty(point Point) {
+	delete(gs.Liberties[point.Row], point.Col)
+
+	if len(gs.Liberties[point.Row]) == 0 {
+		delete(gs.Liberties, point.Row)
+	}
+}
+
+func (gs GoString) addLiberty(point Point) {
+	if _, exists := gs.Liberties[point.Row]; !exists {
+		gs.Liberties[point.Row] = make(map[int]bool)
+	}
+
+	gs.Liberties[point.Row][point.Col] = true
+}
+
+func (gs GoString) remove(set map[int]map[int]bool, row, col int) {
+	delete(set[row], col)
+
+	if len(set[row]) == 0 {
+		delete(set, row)
+	}
+}
+
+func (gs GoString) add(set map[int]map[int]bool, row, col int) {
+	if _, exists := set[row]; !exists {
+		set[row] = make(map[int]bool)
+	}
+
+	set[row][col] = true
+}
+
+func (gs GoString) union(a, b map[int]map[int]bool) map[int]map[int]bool {
+
+	newset := make(map[int]map[int]bool)
+
+	for _, rows := range []map[int]map[int]bool{a, b} {
+		for row, cols := range rows {
+			for col, _ := range cols {
+				gs.add(newset, row, col)
+			}
+		}
+	}
+
+	return newset
+}
+
+func (gs GoString) diff(a, b map[int]map[int]bool) map[int]map[int]bool {
+
+	newset := make(map[int]map[int]bool)
+
+	for row, cols := range a {
+		for col, _ := range cols {
+			if _, exists := b[row][col]; !exists {
+				gs.add(newset, row, col)
+			}
+		}
+	}
+
+	return newset
+}
+
+func (gs GoString) mergeStrings(other GoString) GoString {
+	unionStones := gs.union(gs.Stones, other.Stones)
+	unionLiberties := gs.union(gs.Liberties, other.Liberties)
+	unionLiberties = gs.diff(unionLiberties, unionStones)
+	return GoString{
+		Player:    gs.Player,
+		Stones:    unionStones,
+		Liberties: unionLiberties,
+	}
+}
+
+func (gs GoString) equals(other GoString) bool {
+	return gs.Player == other.Player && reflect.DeepEqual(gs.Stones, other.Stones)
+}
+
+type Board struct {
+	NumRows int
+	NumCols int
+	Grid    []GoString
+}
+
+func (b *Board) Copy() Board {
+	var newGrid []GoString
+	for _, gs := range b.Grid {
+		newGrid = append(newGrid, gs.Copy())
+	}
+
+	return Board{
+		NumRows: b.NumRows,
+		NumCols: b.NumCols,
+		Grid:    newGrid,
+	}
+}
+
+func (b *Board) PlaceStone(player Player, point Point) error {
+	if !b.isOnGrid(point) {
+		return fmt.Errorf("Point %v not on Grid", point)
+	}
+
+	if _, exists := b.get(point); exists {
+		return fmt.Errorf("Point %v already played on Grid", point)
+	}
+
+	var adjacentSameColor []GoString
+	var adjacentOtherColor []GoString
+	liberties := make(map[int]map[int]bool)
+
+	// Loop over all possible neighbors
+	for _, neighbor := range point.Neighbors() {
+		if !b.isOnGrid(neighbor) {
+			continue;
+		}
+
+		neighborString, neighborStringExists := b.getGoString(neighbor)
+		if !neighborStringExists {
+			if _, exists := liberties[neighbor.Row]; !exists {
+				liberties[neighbor.Row] = make(map[int]bool)
+			}
+
+			liberties[neighbor.Row][neighbor.Col] = true
+		} else if neighborString.Player.equals(player) {
+			// When the neighbor string is of the current Player
+			adjacentSameColor = b.appendGoStringUnique(adjacentSameColor, neighborString)
+		} else {
+			// When the neighbor string is of the other Player
+			adjacentOtherColor = b.appendGoStringUnique(adjacentOtherColor, neighborString)
+		}
+	}
+
+	newString := GoString{Player: player, Stones: map[int]map[int]bool{point.Row: {point.Col: true}}, Liberties: liberties}
+
+	// Merge any adjacent strings of the same color
+	for _, gs := range adjacentSameColor {
+		newString = newString.mergeStrings(gs)
+
+		// Remove the old string from the Grid
+		var removeIndex int
+		for gridIndex, gridString := range b.Grid {
+			if gridString.equals(gs) {
+				removeIndex = gridIndex
+				break
+			}
+		}
+
+		b.Grid = b.removeGoString(b.Grid, removeIndex)
+	}
+
+	b.Grid = append(b.Grid, newString)
+
+	// Reduce Liberties of any adjacent strings of the opposite color
+	for _, gs := range adjacentOtherColor {
+		gs.removeLiberty(point)
+	}
+
+	// If any opposite color strings now have zero Liberties, remove them
+	for _, gs := range adjacentOtherColor {
+		if len(gs.Liberties) == 0 {
+			b.removeString(gs)
+		}
+	}
+
+	return nil
+}
+
+/**
+We need to keep in mind that removing a string results in Liberties
+ */
+func (b *Board) removeString(gs GoString) {
+	// Increase Liberties of neighbors
+	for row, cols := range gs.Stones {
+		for col, _ := range cols {
+			point := Point{row, col}
+			for _, neighbor := range point.Neighbors() {
+				neighborStr, exists := b.getGoString(neighbor);
+				if !exists {
+					continue
+				}
+
+				if !neighborStr.equals(gs) {
+					neighborStr.addLiberty(point)
+				}
+			}
+		}
+	}
+
+	// Remove string from Grid
+	for i, other := range b.Grid {
+		if other.equals(gs) {
+			b.Grid = b.removeGoString(b.Grid, i)
+			break
+		}
+	}
+}
+
+func (b *Board) removeGoString(s []GoString, i int) []GoString {
+	s[len(s)-1], s[i] = s[i], s[len(s)-1]
+	return s[:len(s)-1]
+}
+
+func (b *Board) appendGoStringUnique(list []GoString, gs GoString) []GoString {
+	for _, other := range list {
+		if gs.equals(other) {
+			return list
+		}
+	}
+
+	return append(list, gs)
+}
+
+func (b *Board) isOnGrid(point Point) bool {
+	return 1 <= point.Row && point.Row <= b.NumRows && 1 <= point.Col && point.Col <= b.NumCols
+}
+
+func (b *Board) get(point Point) (player Player, exists bool) {
+
+	for _, gs := range b.Grid {
+		if _, exists := gs.Stones[point.Row][point.Col]; exists {
+			return gs.Player, true
+		}
+	}
+
+	return Player{}, false
+}
+
+func (b *Board) getGoString(point Point) (gs GoString, exists bool) {
+
+	for _, gs := range b.Grid {
+		if _, exists := gs.Stones[point.Row][point.Col]; exists {
+			return gs, true
+		}
+	}
+
+	return GoString{}, false
+}
+
+type GameState struct {
+	Board         Board
+	NextPlayer    Player
+	PreviousState *GameState
+	LastMove      Move
+}
+
+func (state GameState) Copy() GameState {
+	newBoard := state.Board.Copy()
+	newPlayer := state.NextPlayer
+	newMove := state.LastMove
+
+	return GameState{
+		Board:         newBoard,
+		NextPlayer:    newPlayer,
+		PreviousState: state.PreviousState, // TODO Not sure if this is enough
+		LastMove:      newMove,
+	}
+}
+
+func (state GameState) applyMove(player Player, move Move) (GameState, error) {
+	if player != state.NextPlayer {
+		return GameState{}, fmt.Errorf("Expected other Player move")
+	}
+
+	if !state.isMoveValid(move) {
+		return GameState{}, fmt.Errorf("Not a valid move")
+	}
+
+	nextBoard := state.Board.Copy()
+
+	if move.IsPlay {
+		nextBoard.PlaceStone(player, move.Point)
+	}
+
+	return GameState{Board: nextBoard, NextPlayer: player.other(), PreviousState: &state, LastMove: move}, nil
+}
+
+func NewGame(boardSize int) GameState {
+	board := Board{NumRows: boardSize, NumCols: boardSize, Grid: []GoString{}}
+	return GameState{
+		Board:      board,
+		NextPlayer: PlayerBlack,
+	}
+}
+
+func (state GameState) isOver() bool {
+	lastMove := state.LastMove
+	if &lastMove == nil {
+		return false
+	}
+
+	if state.PreviousState == nil {
+		return false
+	}
+
+	if lastMove.IsResign {
+		return true
+	}
+
+	secondLastMove := state.PreviousState.LastMove
+	if &secondLastMove == nil {
+		return false
+	}
+
+	return lastMove.IsPass && secondLastMove.IsPass
+}
+
+func (state GameState) isMoveSelfCapture(player Player, move Move) bool {
+	if !move.IsPlay {
+		return false
+	}
+
+	// TODO Seems that this method alters something deep down gamestate!! (at least removes liberties?)
+	// maybe it happens in placestone and not here
+
+	// Dry-Attempt to play it and see if the stone has any liberties
+	nextBoard := state.Board.Copy()
+	nextBoard.PlaceStone(player, move.Point)
+	newString, _ := nextBoard.getGoString(move.Point)
+	return len(newString.Liberties) == 0
+}
+
+func (state GameState) doesMoveViolateKo(player Player, move Move) bool {
+	if !move.IsPlay {
+		return false
+	}
+
+	nextBoard := state.Board.Copy()
+	nextBoard.PlaceStone(player, move.Point)
+
+	nextSituation := Situation{NextPlayer: player.other(), Board: nextBoard}
+	pastState := state.PreviousState
+
+	for pastState != nil {
+		if reflect.DeepEqual(nextSituation, pastState.situation()) {
+			return true
+		}
+		pastState = pastState.PreviousState
+	}
+
+	return false
+}
+
+func (state GameState) situation() Situation {
+	return Situation{NextPlayer: state.NextPlayer, Board: state.Board}
+}
+
+func (state GameState) isMoveValid(move Move) bool {
+	if state.isOver() {
+		return false
+	}
+
+	if move.IsPass || move.IsResign {
+		return true
+	}
+
+	_, exists := state.Board.get(move.Point)
+	if exists {
+		return false
+	}
+
+	return !state.isMoveSelfCapture(state.NextPlayer, move) && !state.doesMoveViolateKo(state.NextPlayer, move)
+}
+
+type Situation struct {
+	NextPlayer Player
+	Board      Board
+}
