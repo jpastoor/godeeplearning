@@ -5,7 +5,8 @@ import (
 	"fmt"
 )
 
-func main() {
+
+func calcHashes() {
 
 	fmt.Println("var (")
 	fmt.Println("hashes = map[bool]map[int]map[int]uint64{")
@@ -20,7 +21,7 @@ func main() {
 			hashesRow := make(map[int]uint64)
 			for col := 1; col <= 19; col++ {
 
-				fmt.Printf("%d: %b,\n", col, rand.Uint64())
+				fmt.Printf("%d: %d,\n", col, rand.Uint64())
 
 			}
 			hashesPlayer[row] = hashesRow

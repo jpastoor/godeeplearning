@@ -59,9 +59,9 @@ func (gs GoString) Copy() GoString {
 	}
 
 	return GoString{
-		Player: newPlayer,
+		Player:    newPlayer,
 		Liberties: newLiberties,
-		Stones: newStones,
+		Stones:    newStones,
 	}
 }
 
@@ -73,12 +73,36 @@ func (gs GoString) removeLiberty(point Point) {
 	}
 }
 
+func (gs GoString) withoutLiberty(point Point) GoString {
+	newGs := gs.Copy()
+
+	delete(newGs.Liberties[point.Row], point.Col)
+
+	if len(newGs.Liberties[point.Row]) == 0 {
+		delete(newGs.Liberties, point.Row)
+	}
+
+	return newGs
+}
+
 func (gs GoString) addLiberty(point Point) {
 	if _, exists := gs.Liberties[point.Row]; !exists {
 		gs.Liberties[point.Row] = make(map[int]bool)
 	}
 
 	gs.Liberties[point.Row][point.Col] = true
+}
+
+func (gs GoString) withLiberty(point Point) GoString {
+	newGs := gs.Copy()
+
+	if _, exists := newGs.Liberties[point.Row]; !exists {
+		newGs.Liberties[point.Row] = make(map[int]bool)
+	}
+
+	newGs.Liberties[point.Row][point.Col] = true
+
+	return newGs
 }
 
 func (gs GoString) remove(set map[int]map[int]bool, row, col int) {
@@ -146,6 +170,7 @@ type Board struct {
 	NumRows int
 	NumCols int
 	Grid    []GoString
+	Hash    uint64
 }
 
 func (b *Board) Copy() Board {
@@ -215,10 +240,11 @@ func (b *Board) PlaceStone(player Player, point Point) error {
 	}
 
 	b.Grid = append(b.Grid, newString)
+	b.Hash ^= hashes[player.isBlack][point.Row][point.Col]
 
 	// Reduce Liberties of any adjacent strings of the opposite color
-	for _, gs := range adjacentOtherColor {
-		gs.removeLiberty(point)
+	for i, gs := range adjacentOtherColor {
+		adjacentOtherColor[i] = gs.withoutLiberty(point)
 	}
 
 	// If any opposite color strings now have zero Liberties, remove them
@@ -255,6 +281,13 @@ func (b *Board) removeString(gs GoString) {
 	// Remove string from Grid
 	for i, other := range b.Grid {
 		if other.equals(gs) {
+
+			for row, cols := range other.Stones {
+				for col, _ := range cols {
+					b.Hash ^= hashes[other.Player.isBlack][row][col]
+				}
+			}
+
 			b.Grid = b.removeGoString(b.Grid, i)
 			break
 		}
@@ -303,10 +336,11 @@ func (b *Board) getGoString(point Point) (gs GoString, exists bool) {
 }
 
 type GameState struct {
-	Board         Board
-	NextPlayer    Player
-	PreviousState *GameState
-	LastMove      Move
+	Board          Board
+	NextPlayer     Player
+	PreviousState  *GameState
+	PreviousStates []Situation
+	LastMove       Move
 }
 
 func (state GameState) Copy() GameState {
@@ -333,18 +367,22 @@ func (state GameState) applyMove(player Player, move Move) (GameState, error) {
 
 	nextBoard := state.Board.Copy()
 
+	prevSituation := Situation{state.NextPlayer, state.Board.Hash}
+
 	if move.IsPlay {
 		nextBoard.PlaceStone(player, move.Point)
 	}
 
-	return GameState{Board: nextBoard, NextPlayer: player.other(), PreviousState: &state, LastMove: move}, nil
+	newPrevSituations := append(state.PreviousStates, prevSituation)
+	return GameState{Board: nextBoard, NextPlayer: player.other(), PreviousState: &state, PreviousStates: newPrevSituations, LastMove: move}, nil
 }
 
 func NewGame(boardSize int) GameState {
 	board := Board{NumRows: boardSize, NumCols: boardSize, Grid: []GoString{}}
 	return GameState{
-		Board:      board,
-		NextPlayer: PlayerBlack,
+		Board:          board,
+		NextPlayer:     PlayerBlack,
+		PreviousStates: []Situation{},
 	}
 }
 
@@ -393,21 +431,19 @@ func (state GameState) doesMoveViolateKo(player Player, move Move) bool {
 	nextBoard := state.Board.Copy()
 	nextBoard.PlaceStone(player, move.Point)
 
-	nextSituation := Situation{NextPlayer: player.other(), Board: nextBoard}
-	pastState := state.PreviousState
+	nextSituation := Situation{NextPlayer: player.other(), Hash: nextBoard.Hash}
 
-	for pastState != nil {
-		if reflect.DeepEqual(nextSituation, pastState.situation()) {
+	for _, pastState := range state.PreviousStates {
+		if pastState.NextPlayer == nextSituation.NextPlayer && pastState.Hash == nextSituation.Hash {
 			return true
 		}
-		pastState = pastState.PreviousState
 	}
 
 	return false
 }
 
 func (state GameState) situation() Situation {
-	return Situation{NextPlayer: state.NextPlayer, Board: state.Board}
+	return Situation{NextPlayer: state.NextPlayer, Hash: state.Board.Hash}
 }
 
 func (state GameState) isMoveValid(move Move) bool {
@@ -429,5 +465,5 @@ func (state GameState) isMoveValid(move Move) bool {
 
 type Situation struct {
 	NextPlayer Player
-	Board      Board
+	Hash       uint64
 }
