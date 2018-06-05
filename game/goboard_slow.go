@@ -1,4 +1,4 @@
-package main
+package game
 
 import (
 	"fmt"
@@ -183,6 +183,7 @@ func (b *Board) Copy() Board {
 		NumRows: b.NumRows,
 		NumCols: b.NumCols,
 		Grid:    newGrid,
+		Hash:    b.Hash,
 	}
 }
 
@@ -349,19 +350,20 @@ func (state GameState) Copy() GameState {
 	newMove := state.LastMove
 
 	return GameState{
-		Board:         newBoard,
-		NextPlayer:    newPlayer,
-		PreviousState: state.PreviousState, // TODO Not sure if this is enough
-		LastMove:      newMove,
+		Board:          newBoard,
+		NextPlayer:     newPlayer,
+		PreviousState:  state.PreviousState,
+		PreviousStates: state.PreviousStates,
+		LastMove:       newMove,
 	}
 }
 
-func (state GameState) applyMove(player Player, move Move) (GameState, error) {
+func (state GameState) ApplyMove(player Player, move Move) (GameState, error) {
 	if player != state.NextPlayer {
 		return GameState{}, fmt.Errorf("Expected other Player move")
 	}
 
-	if !state.isMoveValid(move) {
+	if !state.IsMoveValid(move) {
 		return GameState{}, fmt.Errorf("Not a valid move")
 	}
 
@@ -386,7 +388,7 @@ func NewGame(boardSize int) GameState {
 	}
 }
 
-func (state GameState) isOver() bool {
+func (state GameState) IsOver() bool {
 	lastMove := state.LastMove
 	if &lastMove == nil {
 		return false
@@ -408,7 +410,7 @@ func (state GameState) isOver() bool {
 	return lastMove.IsPass && secondLastMove.IsPass
 }
 
-func (state GameState) isMoveSelfCapture(player Player, move Move) bool {
+func (state GameState) IsMoveSelfCapture(player Player, move Move) bool {
 	if !move.IsPlay {
 		return false
 	}
@@ -423,7 +425,7 @@ func (state GameState) isMoveSelfCapture(player Player, move Move) bool {
 	return len(newString.Liberties) == 0
 }
 
-func (state GameState) doesMoveViolateKo(player Player, move Move) bool {
+func (state GameState) DoesMoveViolateKo(player Player, move Move) bool {
 	if !move.IsPlay {
 		return false
 	}
@@ -446,8 +448,8 @@ func (state GameState) situation() Situation {
 	return Situation{NextPlayer: state.NextPlayer, Hash: state.Board.Hash}
 }
 
-func (state GameState) isMoveValid(move Move) bool {
-	if state.isOver() {
+func (state GameState) IsMoveValid(move Move) bool {
+	if state.IsOver() {
 		return false
 	}
 
@@ -460,7 +462,7 @@ func (state GameState) isMoveValid(move Move) bool {
 		return false
 	}
 
-	return !state.isMoveSelfCapture(state.NextPlayer, move) && !state.doesMoveViolateKo(state.NextPlayer, move)
+	return !state.IsMoveSelfCapture(state.NextPlayer, move) && !state.DoesMoveViolateKo(state.NextPlayer, move)
 }
 
 type Situation struct {

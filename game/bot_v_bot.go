@@ -1,4 +1,4 @@
-package main
+package game
 
 import (
 	"fmt"
@@ -23,7 +23,7 @@ def print_move(player, move):
         move_str = 'resigns'
     else:
         move_str = '%s%d' % (COLS[move.Point.Col - 1], move.Point.Row)
-    print('%s %s' % (player, move_str))
+    Print('%s %s' % (player, move_str))
 
 
 def print_board(Board):
@@ -32,8 +32,8 @@ def print_board(Board):
         for Col in range(1, Board.num_cols + 1):
             stone = Board.get(gotypes.Point(Row=Row, Col=Col))
             line.append(STONE_TO_CHAR[stone])
-        print('%d %s' % (Row, ''.join(line)))
-    print('  ' + COLS[:Board.num_cols])
+        Print('%d %s' % (Row, ''.join(line)))
+    Print('  ' + COLS[:Board.num_cols])
  */
 
 func (b Board) print(printGoStrings bool) {
@@ -63,7 +63,7 @@ func (b Board) print(printGoStrings bool) {
 	}
 }
 
-func (state GameState) print() {
+func (state GameState) Print() {
 
 	if state.PreviousState != nil {
 		fmt.Printf("%s %s\n", state.NextPlayer.other(), state.LastMove.String())

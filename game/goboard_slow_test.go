@@ -1,4 +1,4 @@
-package main
+package game
 
 import (
 	"testing"
@@ -80,7 +80,7 @@ func TestGameStateSelfCapture(t *testing.T) {
 		applyOrFail(t, PlayerWhite, Play(Point{3, 1})).
 		applyOrFail(t, PlayerBlack, Play(Point{2, 1}))
 
-	if !state.isMoveSelfCapture(PlayerWhite, Play(Point{1, 1})) {
+	if !state.IsMoveSelfCapture(PlayerWhite, Play(Point{1, 1})) {
 		t.Fatalf("Did not detect self capture")
 	}
 }
@@ -98,24 +98,38 @@ func TestGameStateViolateKo(t *testing.T) {
 		applyOrFail(t, PlayerBlack, Play(Point{3, 4})).
 		applyOrFail(t, PlayerWhite, Play(Point{3, 3}))
 
-	if !state.doesMoveViolateKo(PlayerBlack, Play(Point{3, 4})) {
+	if !state.DoesMoveViolateKo(PlayerBlack, Play(Point{3, 4})) {
 		t.Fatalf("Did not detect KO")
 	}
 }
 
 func (state GameState) applyOrFail(t *testing.T, player Player, move Move) GameState {
-	state, err := state.applyMove(player, move)
+	state, err := state.ApplyMove(player, move)
 	if err != nil {
 		t.Fatalf("Did not expect error: %v", err)
 	}
 
-	state.print()
+	state.Print()
 	fmt.Println("")
 	return state
 }
 
+func BenchmarkRandomBotSelectMove(b *testing.B) {
+	boardSize := 19
+
+	players := map[Player]Agent{
+		PlayerBlack: &RandomBot{},
+		PlayerWhite: &RandomBot{},
+	}
+
+	game := NewGame(boardSize)
+
+	for n := 0; n < b.N; n++ {
+		players[PlayerBlack].selectMove(game)
+	}
+}
+
 func BenchmarkRandomBots(b *testing.B) {
-	// run the Fib function b.N times
 	for n := 0; n < b.N; n++ {
 		boardSize := 19
 
@@ -127,10 +141,10 @@ func BenchmarkRandomBots(b *testing.B) {
 		game := NewGame(boardSize)
 		var err error
 		moveNr := 1
-		for !game.isOver() {
+		for !game.IsOver() {
 			player := game.NextPlayer
 			nextMove := players[player].selectMove(game)
-			game, err = game.applyMove(player, nextMove)
+			game, err = game.ApplyMove(player, nextMove)
 			moveNr++
 
 			if err != nil {

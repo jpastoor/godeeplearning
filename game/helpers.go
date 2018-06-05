@@ -1,6 +1,6 @@
-package main
+package game
 
-func (b Board) isPointAnEye(point Point, player Player) bool {
+func (b Board) IsPointAnEye(point Point, player Player) bool {
 	_, exists := b.get(point)
 	if exists {
 		return false

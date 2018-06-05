@@ -3,28 +3,29 @@ package main
 import (
 	"fmt"
 	"time"
+	"github.com/jpastoor/godeeplearning/game"
 )
 
 func main() {
 
 	boardSize := 9
 
-	players := map[Player]Agent{
-		PlayerBlack: &RandomBot{},
-		PlayerWhite: &RandomBot{},
+	players := map[game.Player]Agent{
+		game.PlayerBlack: &RandomBot{},
+		game.PlayerWhite: &RandomBot{},
 	}
 
-	game := NewGame(boardSize)
+	myGame := game.NewGame(boardSize)
 	var err error
 	moveNr := 1
-	for !game.isOver() {
+	for !myGame.IsOver() {
 		time.Sleep(1 * time.Second)
-		game.print()
-		player := game.NextPlayer
+		myGame.Print()
+		player := myGame.NextPlayer
 
-		nextMove := players[player].selectMove(game)
+		nextMove := players[player].selectMove(myGame)
 
-		game, err = game.applyMove(player, nextMove)
+		myGame, err = myGame.ApplyMove(player, nextMove)
 
 		fmt.Printf("-- Move %d --\n", moveNr)
 		moveNr++

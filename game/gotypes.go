@@ -1,4 +1,4 @@
-package main
+package game
 
 var (
 	PlayerBlack = Player{isBlack: true}
