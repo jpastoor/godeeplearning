@@ -1,4 +1,4 @@
-package game
+package main
 
 var (
 	empty_board = uint64(0)

@@ -1,4 +1,4 @@
-package game
+package main
 
 import (
 	"fmt"
@@ -6,35 +6,6 @@ import (
 )
 
 const COLS = "ABCDEFGHJKLMNOPQRST"
-
-/**
-COLS = 'ABCDEFGHJKLMNOPQRST'
-STONE_TO_CHAR = {
-    None: '.',
-    gotypes.Player.black: 'x',
-    gotypes.Player.white: 'o',
-}
-
-
-def print_move(player, move):
-    if move.is_pass:
-        move_str = 'passes'
-    elif move.is_resign:
-        move_str = 'resigns'
-    else:
-        move_str = '%s%d' % (COLS[move.Point.Col - 1], move.Point.Row)
-    Print('%s %s' % (player, move_str))
-
-
-def print_board(Board):
-    for Row in range(Board.num_rows, 0, -1):
-        line = []
-        for Col in range(1, Board.num_cols + 1):
-            stone = Board.get(gotypes.Point(Row=Row, Col=Col))
-            line.append(STONE_TO_CHAR[stone])
-        Print('%d %s' % (Row, ''.join(line)))
-    Print('  ' + COLS[:Board.num_cols])
- */
 
 func (b Board) print(printGoStrings bool) {
 

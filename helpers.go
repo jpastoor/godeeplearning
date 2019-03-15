@@ -1,4 +1,4 @@
-package game
+package main
 
 func (b Board) IsPointAnEye(point Point, player Player) bool {
 	_, exists := b.get(point)

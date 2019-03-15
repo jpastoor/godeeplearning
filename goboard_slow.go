@@ -1,8 +1,9 @@
-package game
+package main
 
 import (
 	"fmt"
 	"reflect"
+	"errors"
 )
 
 type Move struct {
@@ -244,8 +245,8 @@ func (b *Board) PlaceStone(player Player, point Point) error {
 	b.Hash ^= hashes[player.isBlack][point.Row][point.Col]
 
 	// Reduce Liberties of any adjacent strings of the opposite color
-	for i, gs := range adjacentOtherColor {
-		adjacentOtherColor[i] = gs.withoutLiberty(point)
+	for _, gs := range adjacentOtherColor {
+		gs.removeLiberty(point)
 	}
 
 	// If any opposite color strings now have zero Liberties, remove them
@@ -363,8 +364,8 @@ func (state GameState) ApplyMove(player Player, move Move) (GameState, error) {
 		return GameState{}, fmt.Errorf("Expected other Player move")
 	}
 
-	if !state.IsMoveValid(move) {
-		return GameState{}, fmt.Errorf("Not a valid move")
+	if err := state.IsMoveValid2(move); err != nil {
+		return GameState{}, err
 	}
 
 	nextBoard := state.Board.Copy()
@@ -377,6 +378,22 @@ func (state GameState) ApplyMove(player Player, move Move) (GameState, error) {
 
 	newPrevSituations := append(state.PreviousStates, prevSituation)
 	return GameState{Board: nextBoard, NextPlayer: player.other(), PreviousState: &state, PreviousStates: newPrevSituations, LastMove: move}, nil
+}
+
+func (state GameState) LegalMoves() []Point {
+	var legalMoves []Point
+
+	for row := 1; row <= state.Board.NumRows; row++ {
+		for col := 1; col <= state.Board.NumCols; col++ {
+			candidate := Point{row, col}
+
+			if state.IsMoveValid(Play(candidate)) && !state.Board.IsPointAnEye(candidate, state.NextPlayer) {
+				legalMoves = append(legalMoves, candidate)
+			}
+		}
+	}
+
+	return legalMoves
 }
 
 func NewGame(boardSize int) GameState {
@@ -463,6 +480,48 @@ func (state GameState) IsMoveValid(move Move) bool {
 	}
 
 	return !state.IsMoveSelfCapture(state.NextPlayer, move) && !state.DoesMoveViolateKo(state.NextPlayer, move)
+}
+
+func (state GameState) IsMoveValid2(move Move) error {
+	if state.IsOver() {
+		return errors.New("Game is over")
+	}
+
+	if move.IsPass || move.IsResign {
+		return nil
+	}
+
+	_, exists := state.Board.get(move.Point)
+	if exists {
+		return errors.New("Already a stone in place")
+	}
+
+	if state.IsMoveSelfCapture(state.NextPlayer, move) {
+		return errors.New("Move is self capture")
+	}
+
+	if state.DoesMoveViolateKo(state.NextPlayer, move) {
+		return errors.New("Move violates KO")
+	}
+
+	return nil
+}
+
+func (state GameState) Winner() *Player {
+	if !state.IsOver() {
+		return nil
+	}
+
+	if state.LastMove.IsResign {
+		return &state.NextPlayer
+	}
+
+	// TODO Very incorrect scoring!! :D
+	if state.Board.CaptureDiff(PlayerBlack) >= 0 {
+		return &PlayerBlack
+	} else {
+		return &PlayerWhite;
+	}
 }
 
 type Situation struct {

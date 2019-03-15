@@ -1,4 +1,4 @@
-package game
+package main
 
 var (
 	PlayerBlack = Player{isBlack: true}
@@ -20,6 +20,7 @@ func (p Player) other() Player {
 func (p Player) equals(other Player) bool {
 	return p.isBlack == other.isBlack
 }
+
 
 type Point struct {
 	Row int
